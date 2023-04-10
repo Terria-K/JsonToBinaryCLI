@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Spectre.Console;
 using Spectre.Console.Json;
@@ -58,38 +59,68 @@ class Program
                 switch (stateAdd) 
                 {
                 case AddState.AddBySelection:
-                    var path = RfdSharp.RfdSharp.OpenFileWithFilter("./", new string[1] { "json" }).Replace("\\", "/");
-                    if (compiler.JsonPaths.Contains(path)) 
+                    var path = RfdSharp.RfdSharp.OpenFileWithFilter("./", new string[1] { "json" });
+
+                    if (string.IsNullOrEmpty(path)) 
                     {
+                        AnsiConsole.Prompt(
+                            new TextPrompt<string>("[red]File dialog closed[/]")
+                            .AllowEmpty());
+                        break;
+                    }
+                    var newPath = path.Replace("\\", "/");
+                    if (compiler.JsonPaths.Contains(newPath)) 
+                    {
+
                         AnsiConsole.Prompt(
                             new TextPrompt<string>("[yellow]Json[/] path already exists")
                             .AllowEmpty());
                         break;
                     }
-                    else 
-                    {
-                        compiler.JsonPaths.Add(path);
-                        Save();
-                    }
+
+                    compiler.JsonPaths.Add(newPath);
+                    Save();
                     break;
                 case AddState.AddByLocal:
-                    var paths = Directory.GetFiles(".", "*.json", SearchOption.AllDirectories)
-                        .Where(x => {
-                            if (compiler == null)
-                                return true;
-                            return !compiler.JsonPaths.Contains(NormalizeRelativePath(x));
-                        });
+                    var paths = Directory.GetFiles(".", "*.json", SearchOption.AllDirectories).AsSpan();
+                    var acceptedPath = new List<string>();
+                    for (int i = 0; i < paths.Length; i++) 
+                    {
+                        var x = paths[i];
+                        if (compiler == null) 
+                        {
+                            acceptedPath.Add(x);
+                            continue;
+                        }
 
+                        if (compiler.Ignore != null) 
+                        {
+                            Span<string> spanned = compiler.Ignore.AsSpan();
+                            for (int j = 0; j < spanned.Length; j++) 
+                            {
+                                var ignore = spanned[j];
+                                if (x.Contains(ignore)) 
+                                {
+                                    goto Continue;
+                                }
+                            }
+                        }
+                        if (!compiler.JsonPaths.Contains(NormalizeRelativePath(x)))
+                            acceptedPath.Add(x);
+                        Continue:
+                        continue;
+                    }
 
                     var addPaths = AnsiConsole.Prompt(
                     new MultiSelectionPrompt<string>()
-                        .Title("Select which path to add")
+                        .Title("Select which path to add\n[gray]Tips: You can ignore some folders in the[/] [yellow]compiler.json[/]")
                         .PageSize(20)
                         .NotRequired()
                         .MoreChoicesText("[grey](Move up and down to reveal more options)[/]")
-                        .AddChoices(paths)
+                        .AddChoices(acceptedPath)
                     );
-                    foreach (var addPath in addPaths) 
+                    var collections = CollectionsMarshal.AsSpan(addPaths);
+                    foreach (var addPath in collections) 
                     {
                         compiler.JsonPaths.Add(NormalizeRelativePath(addPath));
                     }
@@ -218,4 +249,5 @@ class Program
 partial class CompilerConfig : IDeserialize, ISerialize 
 {
     public List<string> JsonPaths { get; set; }
+    public string[] Ignore { get; set; }
 }
