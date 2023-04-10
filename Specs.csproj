@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net7.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="0.46.0" />
+    <PackageReference Include="Spectre.Console.Json" Version="0.46.0" />
+    <PackageReference Include="TeuJson" Version="2.2.2" />
+    <PackageReference Include="TeuJson.Generator" Version="2.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="./lib/**" PackagePath="runtimes" Visible="true" />
+    <Content Include="./lib/rfd_sharp.dll">
+      <Link>rfd_sharp.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

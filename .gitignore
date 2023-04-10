@@ -1,0 +1,10 @@
+.vscode/
+bin/
+obj/
+*.bin
+compiler.json
+
+
+*.exp
+*.lib
+*.pdb
