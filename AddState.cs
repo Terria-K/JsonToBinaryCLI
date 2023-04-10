@@ -1,6 +1,6 @@
 enum AddState 
 {
-    AddByLocal,
     AddBySelection,
+    AddByLocal,
     Back
 }

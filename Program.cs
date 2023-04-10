@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Spectre.Console;
@@ -16,6 +15,7 @@ class Program
     [STAThread]
     public static void Main(string[] args) 
     {
+        Console.CancelKeyPress += ProcessExit;
         var panel = new Panel("Teuria Json Compiler") 
         {
             Border = BoxBorder.Rounded
@@ -42,7 +42,7 @@ class Program
                         .Title("Select a state")
                         .PageSize(10)
                         .MoreChoicesText("[grey](Move up and down to reveal more options)[/]")
-                        .AddChoices(State.Add, State.Remove, State.Compile, State.List, State.Quit)
+                        .AddChoices(State.Add, State.Remove, State.Compile, State.Option, State.List, State.Quit)
                 );
             }
 
@@ -82,34 +82,50 @@ class Program
                     Save();
                     break;
                 case AddState.AddByLocal:
-                    var paths = Directory.GetFiles(".", "*.json", SearchOption.AllDirectories).AsSpan();
-                    var acceptedPath = new List<string>();
-                    for (int i = 0; i < paths.Length; i++) 
+                    var progress = AnsiConsole.Status();
+                    var acceptedPath = progress.Start("[green]Getting the files[/]", ctx => 
                     {
-                        var x = paths[i];
-                        if (compiler == null) 
-                        {
-                            acceptedPath.Add(x);
-                            continue;
-                        }
+                        ctx.Spinner(Spinner.Known.Arrow);
+                        Span<string> paths = Directory.GetFiles(".", "*.json", SearchOption.AllDirectories).AsSpan();
+                        List<string> acceptedPath = new List<string>();
+                        double length = 100.0 / paths.Length;
 
-                        if (compiler.Ignore != null) 
+                        ctx.Status("[yellow]Filtering out the files[/]");
+                        ctx.Spinner(Spinner.Known.BoxBounce);
+                        for (int i = 0; i < paths.Length; i++) 
                         {
-                            Span<string> spanned = compiler.Ignore.AsSpan();
-                            for (int j = 0; j < spanned.Length; j++) 
+                            var x = paths[i];
+                            if (compiler == null) 
                             {
-                                var ignore = spanned[j];
-                                if (x.Contains(ignore)) 
+                                acceptedPath.Add(x);
+                                continue;
+                            }
+
+                            if (compiler.Ignore != null) 
+                            {
+                                Span<string> spanned = CollectionsMarshal.AsSpan(compiler.Ignore);
+                                for (int j = 0; j < spanned.Length; j++) 
                                 {
-                                    goto Continue;
+                                    var ignore = spanned[j];
+                                    if (x.Contains(ignore)) 
+                                    {
+                                        goto Continue;
+                                    }
                                 }
                             }
+                            if (!compiler.JsonPaths.Contains(NormalizeRelativePath(x))) 
+                            {
+                                acceptedPath.Add(x);
+                            }
+
+                            Continue:
+                            continue;
                         }
-                        if (!compiler.JsonPaths.Contains(NormalizeRelativePath(x)))
-                            acceptedPath.Add(x);
-                        Continue:
-                        continue;
-                    }
+                        ctx.Status("Done!");
+                        
+
+                        return acceptedPath;
+                    });
 
                     var addPaths = AnsiConsole.Prompt(
                     new MultiSelectionPrompt<string>()
@@ -223,15 +239,97 @@ class Program
                 }
                 
                 break;
+            case State.Option:
+                var option = AnsiConsole.Prompt(
+                    new SelectionPrompt<OptionState>()
+                        .PageSize(10)
+                        .MoreChoicesText("[grey](Move up and down to reveal more options)[/]")
+                        .AddChoices(OptionState.AddIgnore, OptionState.RemoveIgnore, OptionState.ToggleMotiv, OptionState.Back)
+                    );
+                switch (option) 
+                {
+                case OptionState.AddIgnore:
+                    var dirName = AnsiConsole.Prompt(
+                        new TextPrompt<string>("[yellow]Directory name to filter out?[/]")
+                        .AllowEmpty());
+                    if (string.IsNullOrEmpty(dirName)) 
+                    {
+                        AnsiConsole.MarkupLine("[red]Cancelled[/]");
+                        break;
+                    }
+                    if (compiler.Ignore.Contains(dirName)) 
+                    {
+                        AnsiConsole.MarkupLine("[red]Directory is already in the ignore collection[/]");
+                        break;
+                    }
+                    compiler.Ignore.Add(dirName);
+                    Save();
+                    break;
+                case OptionState.RemoveIgnore:
+                    if (compiler.Ignore.Count <= 0) 
+                    {
+                        AnsiConsole.Prompt(
+                            new TextPrompt<string>("There is no ignore to remove.")
+                                .AllowEmpty());
+                        break;
+                    }
+                    var removeIgnores = AnsiConsole.Prompt(
+                        new MultiSelectionPrompt<string>()
+                            .Title("Select which ignore to remove")
+                            .PageSize(10)
+                            .NotRequired()
+                            .MoreChoicesText("[grey](Move up and down to reveal more options)[/]")
+                            .AddChoices(compiler.Ignore)
+                    );
+                    foreach (var path in removeIgnores) 
+                    {
+                        compiler.Ignore.Remove(path);
+                    }
+                    Save();
+                    break;
+                case OptionState.ToggleMotiv:
+                    compiler.ToggleMotivationalSpeech = !compiler.ToggleMotivationalSpeech;
+                    Save();
+                    break;
+                case OptionState.Back:
+                    break;
+                }
+                break;
             case State.Quit:
-                AnsiConsole.Write("Exited");
                 goto End;
             }
             Thread.Sleep(10);
         }
         End:
+        ProcessExit(null, null);
         return;
     }
+
+    private static void ProcessExit(object sender, ConsoleCancelEventArgs e)
+    {
+        var messageIdx = Random.Shared.Next(0, messages.Length);
+        var speech = compiler.ToggleMotivationalSpeech ? messages[messageIdx] : "Exiting..";
+
+        var exitPanel = new Panel("")
+            .HeaderAlignment(Justify.Center)
+            .Header(speech)
+            .BorderColor(Color.Green)
+            .RoundedBorder();
+        exitPanel.Width = 400;
+        AnsiConsole.Write(exitPanel);
+    }
+
+    private static string[] messages = { 
+        "See you next time!",
+        "Hope you come back!",
+        "More things to convert in binary!",
+        "Farewell!",
+        "Sayonara!",
+        "We will miss you!",
+        "We love you!",
+        "Keep going!",
+        "You can do it!"
+    };
 
     private static void Save() 
     {
@@ -249,5 +347,6 @@ class Program
 partial class CompilerConfig : IDeserialize, ISerialize 
 {
     public List<string> JsonPaths { get; set; }
-    public string[] Ignore { get; set; }
+    public List<string> Ignore { get; set; }
+    public bool ToggleMotivationalSpeech { get; set; } = true;
 }
