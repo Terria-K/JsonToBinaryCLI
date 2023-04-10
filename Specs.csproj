@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishAOT>true</PublishAOT>
   </PropertyGroup>
 
   <ItemGroup>

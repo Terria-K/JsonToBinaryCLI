@@ -122,6 +122,13 @@ class Program
                 Save();
                 break;
             case State.Compile:
+                if (compiler.JsonPaths.Count <= 0) 
+                {
+                    AnsiConsole.Prompt(
+                        new TextPrompt<string>("[yellow]There is nothing to compile.[/]")
+                        .AllowEmpty());
+                    break;
+                }
                 AnsiConsole.Progress()
                     .Start(ctx => 
                     {
